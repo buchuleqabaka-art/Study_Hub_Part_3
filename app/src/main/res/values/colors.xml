@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="white">#FFFFFF</color>
+    <color name="bg">#E3C7E6</color>
+    <color name="primary">#C77DE8</color>
+    <color name="primary_dark">#8E44AD</color>
+    <color name="card">#F1E3F4</color>
+    <color name="card_gray">#DCCFDB</color>
+    <color name="input">#E3DBE4</color>
+    <color name="nav">#EBD9EE</color>
+    <color name="text_dark">#1B1B1F</color>
+    <color name="text_gray">#7A7A7A</color>
+    <color name="pill_text">#1B1B1F</color>
+    <color name="bubble">#D393EA</color>
+    <color name="bar_off">#CDB8D2</color>
+    <color name="high">#FF8F7F</color>
+    <color name="medium">#FFF59D</color>
+    <color name="low">#A5E8B4</color>
+    <color name="error">#E57373</color>
+</resources>
