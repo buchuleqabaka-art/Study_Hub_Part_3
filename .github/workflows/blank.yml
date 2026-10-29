@@ -1,36 +1,234 @@
-# This is a basic workflow to help you get started with Actions
+name: Android CI
 
-name: CI
-
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "master" branch
   push:
-    branches: [ "master" ]
+    branches: [main, master, "arena/**"]
   pull_request:
-    branches: [ "master" ]
-
-  # Allows you to run this workflow manually from the Actions tab
+    branches: [main, master]
   workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+permissions:
+  contents: write
+
 jobs:
-  # This workflow contains a single job called "build"
   build:
-    # The type of runner that the job will run on
+    name: Assemble debug APK
     runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
+      - name: Prepare permanent APK signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.STUDYHUB_KEYSTORE_BASE64 || secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.STUDYHUB_KEYSTORE_PASSWORD || secrets.KEYSTORE_PASSWORD }}
         run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+          set -euo pipefail
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ]; then
+            keystore_path="$RUNNER_TEMP/studyhub-update.jks"
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
+            chmod 600 "$keystore_path"
+            keytool -list -keystore "$keystore_path" -alias studyhub -storepass:env KEYSTORE_PASSWORD > /dev/null || true
+            echo "STUDYHUB_KEYSTORE_PATH=$keystore_path" >> "$GITHUB_ENV"
+            echo "HAVE_KEYSTORE=true" >> "$GITHUB_ENV"
+          else
+            echo "::notice::STUDYHUB_KEYSTORE_BASE64 / KEYSTORE_BASE64 not set — build will use default debug key."
+            echo "HAVE_KEYSTORE=false" >> "$GITHUB_ENV"
+          fi
+          echo "STUDYHUB_VERSION_CODE=$((100000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+          cache-disabled: true
+
+      - name: Ensure Gradle wrapper scripts exist
+        run: |
+          if [ ! -f ./gradlew ]; then
+            gradle wrapper --gradle-version 8.7
+          fi
+          chmod +x ./gradlew
+
+      - name: Run unit tests
+        run: |
+          set +e
+          ./gradlew testDebugUnitTest --stacktrace 2>&1 | tee test-output.log
+          status=${PIPESTATUS[0]}
+          echo "TEST_EXIT=$status" >> "$GITHUB_ENV"
+          echo "Gradle testDebugUnitTest exit: $status"
+          exit 0
+
+      - name: Report unit-test totals
+        if: always()
+        run: |
+          shopt -s nullglob
+          files=(app/build/test-results/testDebugUnitTest/*.xml)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::warning::No JUnit XML found — unit tests did not produce results"
+            exit 0
+          fi
+          python3 - "${files[@]}" <<'PYEOF'
+          import sys, xml.etree.ElementTree as ET
+          total = failed = skipped = 0
+          classes = 0
+          for path in sys.argv[1:]:
+              root = ET.parse(path).getroot()
+              classes += 1
+              total += int(root.get("tests") or 0)
+              failed += int(root.get("failures") or 0) + int(root.get("errors") or 0)
+              skipped += int(root.get("skipped") or 0)
+          print(f"Test classes: {classes}, tests: {total}, failed: {failed}, skipped: {skipped}")
+          print(f"::notice::StudyHub unit tests: {total} tests across {classes} classes — {failed} failed, {skipped} skipped")
+          PYEOF
+
+      - name: Assemble debug APK
+        run: |
+          set +e
+          ./gradlew assembleDebug --stacktrace 2>&1 | tee build-output.log
+          status=${PIPESTATUS[0]}
+          echo "BUILD_EXIT=$status" >> "$GITHUB_ENV"
+          if [ "$status" -ne 0 ]; then
+            echo "=== BUILD FAILED (exit $status) ==="
+            grep -E "^e: " build-output.log | head -10 | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+            FIRST_ERR=$(grep -m1 -E "^e: |What went wrong|FAILURE: Build failed" build-output.log)
+            echo "::error::${FIRST_ERR:-Gradle build failed — see .build/ci-failure.log committed to this branch}"
+          fi
+          exit $status
+
+      - name: Verify APK signing
+        if: env.HAVE_KEYSTORE == 'true'
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.STUDYHUB_KEYSTORE_PASSWORD || secrets.KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          signer=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          export STUDYHUB_APKSIGNER="$signer"
+          python3 - <<'PYEOF'
+          import hashlib, os, re, subprocess
+          certificate = subprocess.check_output([
+              "keytool", "-exportcert", "-keystore", os.environ["STUDYHUB_KEYSTORE_PATH"],
+              "-alias", "studyhub", "-storepass:env", "KEYSTORE_PASSWORD"
+          ])
+          expected = hashlib.sha256(certificate).hexdigest()
+          result = subprocess.run([
+              os.environ["STUDYHUB_APKSIGNER"], "verify", "--print-certs",
+              "app/build/outputs/apk/debug/app-debug.apk"
+          ], check=True, capture_output=True, text=True)
+          actual = {value.lower() for value in re.findall(
+              r"certificate SHA-256 digest:\s*([0-9a-fA-F]{64})", result.stdout
+          )}
+          print("Expected signing certificate SHA-256:", expected)
+          print("APK signing certificate SHA-256:", ", ".join(sorted(actual)) or "(not detected)")
+          if actual != {expected}:
+              print(result.stdout)
+              raise SystemExit("APK signing certificate does not match the permanent update key.")
+          PYEOF
+
+      - name: Upload debug APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudyHub-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: app/build/reports/tests/
+          if-no-files-found: ignore
+
+      - name: Surface unit-test failures
+        if: always() && env.TEST_EXIT != '' && env.TEST_EXIT != '0'
+        run: |
+          echo "=== unit tests failed (exit $TEST_EXIT) ==="
+          echo "--- Gradle / Kotlin compiler diagnostics ---"
+          grep -E "^e: |FAILURE: |What went wrong|> Task .* FAILED|Caused by: " test-output.log | head -40 || true
+          echo
+          echo "--- failed assertions from the JUnit XML reports ---"
+          shopt -s nullglob
+          for f in app/build/test-results/testDebugUnitTest/*.xml; do
+            python3 - "$f" <<'PYEOF'
+          import sys, xml.etree.ElementTree as ET
+          root = ET.parse(sys.argv[1]).getroot()
+          for tc in root.iter("testcase"):
+              for bad in list(tc.iter("failure")) + list(tc.iter("error")):
+                  msg = (bad.get("message") or "").replace("\n", " ")[:280]
+                  print(f"::error::TEST {tc.get('classname')}.{tc.get('name')}: {msg}")
+          PYEOF
+          done
+          echo
+          echo "--- compiler errors (as annotations) ---"
+          grep -E "^e: " test-output.log | head -10 | while IFS= read -r line; do
+            echo "::error::${line}"
+          done
+          exit 1
+
+      - name: Save failure log for inspection
+        if: failure()
+        run: |
+          mkdir -p .build
+          {
+            echo "=== gradle exit context ==="
+            java -version 2>&1
+            echo "ANDROID_HOME=$ANDROID_HOME"
+            echo "TEST_EXIT=$TEST_EXIT BUILD_EXIT=$BUILD_EXIT"
+            echo
+            echo "Generated BuildConfig omitted: it may contain private build credentials."
+            echo
+            echo "=== every failing test (parsed from the JUnit XML) ==="
+            shopt -s nullglob
+            for f in app/build/test-results/testDebugUnitTest/*.xml; do
+              python3 - "$f" <<'PYEOF'
+          import sys, xml.etree.ElementTree as ET
+          root = ET.parse(sys.argv[1]).getroot()
+          for tc in root.iter("testcase"):
+              for bad in list(tc.iter("failure")) + list(tc.iter("error")):
+                  msg = (bad.get("message") or "").strip().splitlines()
+                  first = msg[0][:200] if msg else ""
+                  print(f"FAIL {tc.get('classname')}.{tc.get('name')}")
+                  print(f"     {first}")
+          PYEOF
+            done
+            echo
+            echo "=== unit test output (tail) ==="
+            tail -n 250 test-output.log 2>/dev/null || echo "(no test log)"
+            echo
+            echo "=== build output (tail) ==="
+            tail -n 400 build-output.log 2>/dev/null || echo "(no build log)"
+          } > .build/ci-failure.log
+          git config user.name "studyhub-ci"
+          git config user.email "ci@studyhub.local"
+          git add .build/ci-failure.log
+          git commit -m "ci: save build failure log [skip ci]" || echo "nothing to commit"
+          git push origin "HEAD:refs/heads/$GITHUB_REF_NAME" || echo "could not push log"
+
+      - name: Commit exported Room schema
+        if: success()
+        run: |
+          set +e
+          if [ -d app/schemas ] && [ -n "$(git status --porcelain app/schemas)" ]; then
+            git config user.name "studyhub-ci"
+            git config user.email "ci@studyhub.local"
+            git add app/schemas
+            git commit -m "chore: export Room schema baseline [skip ci]"
+            git push origin "HEAD:refs/heads/$GITHUB_REF_NAME" || echo "could not push schema"
+          else
+            echo "No Room schema changes to commit."
+          fi
+
+      - name: Remove temporary signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/studyhub-update.jks"

@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Study Hub</string>
+    <string name="app_name">StudyHub</string>
     <string name="welcome_title">Welcome to StudyHub</string>
     <string name="register_title">Register</string>
     <string name="login_title">Login</string>

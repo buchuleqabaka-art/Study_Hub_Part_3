@@ -1,24 +1,145 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/register_root"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg"
-    tools:context=".RegisterActivity">
+    android:fillViewport="true">
 
-    <TextView
-        android:id="@+id/tvRegisterTitle"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/register_title"
-        android:textColor="@color/text_dark"
-        android:textSize="24sp"
-        android:textStyle="bold"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        android:orientation="vertical"
+        android:padding="20dp">
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:gravity="center"
+            android:text="Create new Account"
+            android:textColor="@color/text_dark"
+            android:textSize="32sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvGoToLogin"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:gravity="center"
+            android:padding="8dp"
+            android:text="Already Registered? Log in here."
+            android:textColor="@color/text_gray" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="NAME" android:textColor="@color/text_gray" android:textStyle="bold" />
+            <EditText android:id="@+id/etName" style="@style/StudyHub.Input"
+                android:hint="Your name" android:inputType="textPersonName" />
+
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="EMAIL" android:textColor="@color/text_gray" android:textStyle="bold" />
+            <EditText android:id="@+id/etEmail" style="@style/StudyHub.Input"
+                android:hint="you@example.com" android:inputType="textEmailAddress" />
+
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="PASSWORD" android:textColor="@color/text_gray" android:textStyle="bold" />
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+                <EditText android:id="@+id/etPassword" style="@style/StudyHub.Input"
+                    android:layout_marginBottom="6dp"
+                    android:hint="Password" android:inputType="textPassword" />
+                <ImageView
+                    android:id="@+id/btnTogglePass"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_gravity="end|center_vertical"
+                    android:layout_marginEnd="6dp"
+                    android:padding="12dp"
+                    android:src="@drawable/ic_eye" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <View android:id="@+id/bar1" android:layout_width="0dp" android:layout_height="5dp"
+                    android:layout_margin="2dp" android:layout_weight="1"
+                    android:background="@drawable/bg_bar" android:backgroundTint="@color/bar_off" />
+                <View android:id="@+id/bar2" android:layout_width="0dp" android:layout_height="5dp"
+                    android:layout_margin="2dp" android:layout_weight="1"
+                    android:background="@drawable/bg_bar" android:backgroundTint="@color/bar_off" />
+                <View android:id="@+id/bar3" android:layout_width="0dp" android:layout_height="5dp"
+                    android:layout_margin="2dp" android:layout_weight="1"
+                    android:background="@drawable/bg_bar" android:backgroundTint="@color/bar_off" />
+                <View android:id="@+id/bar4" android:layout_width="0dp" android:layout_height="5dp"
+                    android:layout_margin="2dp" android:layout_weight="1"
+                    android:background="@drawable/bg_bar" android:backgroundTint="@color/bar_off" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvStrength"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
+                android:text="Password strength: Too weak"
+                android:textColor="@color/text_gray" />
+
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="DATE OF BIRTH" android:textColor="@color/text_gray" android:textStyle="bold" />
+            <EditText android:id="@+id/etDob" style="@style/StudyHub.Input"
+                android:layout_marginBottom="4dp"
+                android:focusable="false" android:hint="Select date of birth" />
+
+            <TextView
+                android:id="@+id/tvDobError"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="You must be at least 13 years old."
+                android:textColor="@color/error"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/tvError"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:textColor="@color/error"
+                android:visibility="gone" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSignUp"
+                style="@style/StudyHub.Button"
+                android:layout_marginTop="16dp"
+                android:text="Sign up" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="12dp"
+                android:gravity="center"
+                android:text="or continue with"
+                android:textColor="@color/text_gray" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnGoogle"
+                style="@style/StudyHub.Button.Google"
+                android:text="Continue with Google" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnApple"
+                style="@style/StudyHub.Button.Google"
+                android:layout_marginTop="8dp"
+                android:text="Continue with Apple" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>
